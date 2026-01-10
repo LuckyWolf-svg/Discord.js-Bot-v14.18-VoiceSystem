@@ -1,24 +1,42 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { saveChannelSettings, getChannelSettings, deleteChannelSettings, updateChannelId, getUserByChannelId } from '../database.js';
-import { CHANNEL_IDS } from '../server_ids.js';
+import { saveChannelSettings, getChannelSettings, deleteChannelSettings, updateChannelId, getUserByChannelId } from '../../database.js';
+import { CHANNEL_IDS } from '../../server_ids.js';
 
 export const userChannels = {};
 const transferRequests = new Map();
 
 export function registerVoiceButton(client) {
-    client.on('messageCreate', async (message) => {
-        if (message.author.bot) return;
-        
-        if (message.content === '!VoiceSetting') {
-            const member = message.member;
-            if (!member.voice.channel) {
-                await message.channel.send("Вы не находитесь в голосовом канале.");
+    client.on('interactionCreate', async interaction => {
+        // === Обработка слеш-команды /voicesettings ===
+        if (interaction.isChatInputCommand() && interaction.commandName === 'voicesettings') {
+            // Проверка прав — только для роли OWNER_ID
+            if (!interaction.member.roles.cache.has(CHANNEL_IDS.OWNER_ID)) {
+                await interaction.reply({
+                    content: '❌ У вас нет прав для использования этой команды.',
+                    ephemeral: true
+                });
                 return;
             }
 
-            const targetTextChannel = message.guild.channels.cache.get(CHANNEL_IDS.VOICE_CREATE);
+            const channelId = interaction.options.getString('channel_id');
+
+            // Проверяем, что указанный канал существует и является голосовым
+            const voiceChannel = interaction.guild.channels.cache.get(channelId);
+            if (!voiceChannel || voiceChannel.type !== 2) { // 2 = GuildVoice
+                await interaction.reply({
+                    content: '❌ Указанный ID не является голосовым каналом.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Канал, куда отправляем панель с кнопками
+            const targetTextChannel = interaction.guild.channels.cache.get(CHANNEL_IDS.VOICE_CREATE);
             if (!targetTextChannel) {
-                await message.channel.send("Не удалось найти канал для настроек.");
+                await interaction.reply({
+                    content: '❌ Не удалось найти канал для отправки панели настроек.',
+                    ephemeral: true
+                });
                 return;
             }
 
@@ -32,7 +50,7 @@ export function registerVoiceButton(client) {
                 new ButtonBuilder().setCustomId('kickVoice').setLabel('🚫').setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('banVoice').setLabel('❌').setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('UnbanVoice').setLabel('📩').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('mute_unmute').setLabel('🔇').setStyle(ButtonStyle.Primary) 
+                new ButtonBuilder().setCustomId('mute_unmute').setLabel('🔇').setStyle(ButtonStyle.Primary)
             ];
 
             const row1 = new ActionRowBuilder().addComponents(buttons.slice(0, 5));
@@ -40,29 +58,32 @@ export function registerVoiceButton(client) {
 
             const embed = new EmbedBuilder()
                 .setColor(0xFF5CBD)
-                .setAuthor({ name: 'Ваши права на планете' })
+                .setAuthor({ name: 'Настройки голосового канала' })
                 .setThumbnail('https://i.imgur.com/a/QWt4jAN.png')
                 .addFields(
-                    { name: '👑 - Передать управление каналом другому пользователю', value: '' },
-                    { name: '📝 - Изменить название голосового канала', value: '' },
-                    { name: '📊 - Установить максимальное количество участников', value: '' },
-                    { name: '🔒 - Закрыть или открыть доступ к комнате для всех', value: '' },
-                    { name: '👁️ - Скрыть или показать комнату в списке каналов', value: '' },
-
-                    { name: '🚫 - Кикнуть пользователя из вашего канала', value: '' },
-                    { name: '❌ - Забанить пользователя в вашем канале', value: '' },
-                    { name: '📩 - Разбанить пользователя в вашем канале', value: '' },
-                    { name: '🔇 - Заглушить или разрешить говорить участнику', value: '' }
+                    { name: '👑 - Передать управление каналом другому пользователю', value: ' ' },
+                    { name: '📝 - Изменить название голосового канала', value: ' ' },
+                    { name: '📊 - Установить максимальное количество участников', value: ' ' },
+                    { name: '🔒 - Закрыть или открыть доступ к комнате для всех', value: ' ' },
+                    { name: '👁️ - Скрыть или показать комнату в списке каналов', value: ' ' },
+                    { name: '🚫 - Кикнуть пользователя из вашего канала', value: ' ' },
+                    { name: '❌ - Забанить пользователя в вашем канале', value: ' ' },
+                    { name: '📩 - Разбанить пользователя в вашем канале', value: ' ' },
+                    { name: '🔇 - Заглушить или разрешить говорить участнику', value: ' ' }
                 );
 
             await targetTextChannel.send({
                 embeds: [embed],
                 components: [row1, row2]
             });
-        }
-    });
 
-    client.on('interactionCreate', async interaction => {
+            await interaction.reply({
+                content: `✅ Панель управления отправлена в <#${CHANNEL_IDS.VOICE_CREATE}> для канала **${voiceChannel.name}**`,
+                ephemeral: true
+            });
+            return;
+        }
+
         if (!interaction.isButton()) return;
 
         try {
@@ -70,25 +91,26 @@ export function registerVoiceButton(client) {
                 await handleTransferResponse(interaction);
                 return;
             }
+
             const { member, user, guild, customId } = interaction;
             const userId = user.id;
             const userSettings = await getChannelSettings(userId);
             const userChannelId = userSettings?.channel_id || userChannels[userId];
             const userChannel = guild.channels.cache.get(userChannelId);
-            
+
             if (!userChannel || !userChannel.members.has(userId)) {
-                await interaction.reply({ 
-                    content: 'У вас нет прав для управления этим каналом.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: 'У вас нет прав для управления этим каналом.',
+                    ephemeral: true
                 });
                 return;
             }
 
             const voiceChannel = member.voice.channel;
             if (!voiceChannel || voiceChannel.id !== userChannelId) {
-                await interaction.reply({ 
-                    content: 'Вы не находитесь в своем канале.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: 'Вы не находитесь в своем канале.',
+                    ephemeral: true
                 });
                 return;
             }
@@ -133,9 +155,9 @@ export function registerVoiceButton(client) {
         } catch (error) {
             console.error('Ошибка в обработчике кнопок:', error);
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ 
-                    content: 'Произошла ошибка при обработке запроса.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: 'Произошла ошибка при обработке запроса.',
+                    ephemeral: true
                 });
             }
         }
@@ -510,12 +532,15 @@ function createMessageCollector(interaction, userId) {
 
 async function handleLockUnlock(interaction, userId, userChannel) {
     try {
+        const roleIds = Array.isArray(CHANNEL_IDS.ROLES_ST_ID) ? CHANNEL_IDS.ROLES_ST_ID : [CHANNEL_IDS.ROLES_ST_ID];
         const userSettings = await getChannelSettings(userId) || {};
         const isLocked = userSettings.is_locked || false;
         
-        await userChannel.permissionOverwrites.edit(CHANNEL_IDS.ROLES_ST_ID, {
-            Connect: isLocked ? true : false,
-        });
+        for (const roleId of roleIds) {
+            await userChannel.permissionOverwrites.edit(roleId, {
+                Connect: isLocked ? true : false,
+            });
+        }
         
         await saveChannelSettings(interaction.guild, userId, {
             ...userSettings,
@@ -538,12 +563,15 @@ async function handleLockUnlock(interaction, userId, userChannel) {
 
 async function handleHideShow(interaction, userId, userChannel) {
     try {
+        const roleIds = Array.isArray(CHANNEL_IDS.ROLES_ST_ID) ? CHANNEL_IDS.ROLES_ST_ID : [CHANNEL_IDS.ROLES_ST_ID];
         const userSettings = await getChannelSettings(userId) || {};
         const isHidden = userSettings.is_hidden || false;
-
-        await userChannel.permissionOverwrites.edit(CHANNEL_IDS.ROLES_ST_ID, {
-            ViewChannel: isHidden ? true : false,
-        });
+        
+        for (const roleId of roleIds) {
+            await userChannel.permissionOverwrites.edit(roleId, {
+                ViewChannel: isHidden ? true : false,
+            });
+        }
         
         await saveChannelSettings(interaction.guild, userId, {
             ...userSettings,
