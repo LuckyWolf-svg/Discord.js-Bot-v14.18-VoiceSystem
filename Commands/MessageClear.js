@@ -1,15 +1,19 @@
 import { Events } from 'discord.js';
-import { sendLogEmbed } from '../Events/Logs/LogSettings.js';
+import { sendLogEmbed } from '../Events/LogSettings.js';
+import { CHANNEL_IDS } from '../server_ids.js';
 
 export function registerMessageClearCommand(client) {
     client.on(Events.InteractionCreate, async interaction => {
         if (!interaction.isChatInputCommand()) return;
         
         if (interaction.commandName === 'clear') {
-            // Проверяем права пользователя
-            if (!interaction.member.permissions.has('ManageMessages')) {
+            const hasAdminRole = Array.isArray(CHANNEL_IDS.ADMIN_ROLE) 
+                ? CHANNEL_IDS.ADMIN_ROLE.some(roleId => interaction.member.roles.cache.has(roleId))
+                : interaction.member.roles.cache.has(CHANNEL_IDS.ADMIN_ROLE);
+            
+            if (!hasAdminRole) {
                 return await interaction.reply({
-                    content: '❌ У вас нет прав для управления сообщениями!',
+                    content: '❌ Только администраторы могут использовать эту команду!',
                     ephemeral: true
                 });
             }
@@ -19,7 +23,6 @@ export function registerMessageClearCommand(client) {
             try {
                 await interaction.deferReply({ ephemeral: true });
 
-                // Получаем сообщения и фильтруем те, которые старше 14 дней
                 const messages = await interaction.channel.messages.fetch({ limit: amount });
                 const filteredMessages = messages.filter(msg => {
                     return Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000;
@@ -31,16 +34,15 @@ export function registerMessageClearCommand(client) {
                     });
                 }
 
-                // Удаляем сообщения
                 await interaction.channel.bulkDelete(filteredMessages, true);
-
-                // Отправляем лог
+                
+                // Логирование
                 await sendLogEmbed(client, 
                     '🗑️ Массовое удаление сообщений',
                     `Было удалено ${filteredMessages.size} сообщений в канале`,
                     '#FF6B6B',
                     [
-                        { name: 'Модератор', value: `${interaction.user} (ID: ${interaction.user.id})`, inline: true },
+                        { name: 'Администратор', value: `${interaction.user} (ID: ${interaction.user.id})`, inline: true },
                         { name: 'Канал', value: `${interaction.channel}`, inline: true },
                         { name: 'Запрошено', value: `${amount} сообщений`, inline: true },
                         { name: 'Удалено', value: `${filteredMessages.size} сообщений`, inline: true }
