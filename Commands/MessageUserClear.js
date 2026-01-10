@@ -1,14 +1,20 @@
 import { Events } from 'discord.js';
-import { sendLogEmbed } from '../Events/Logs/LogSettings.js';
+import { sendLogEmbed } from '..//Events/Logs/LogSettings.js';
+import { CHANNEL_IDS } from '../server_ids.js'; // Добавляем импорт
 
 export function registerMessageUserClearCommand(client) {
     client.on(Events.InteractionCreate, async interaction => {
         if (!interaction.isChatInputCommand()) return;
         
         if (interaction.commandName === 'clearuser') {
-            if (!interaction.member.permissions.has('ManageMessages')) {
+            // Проверяем, есть ли у пользователя роль администратора
+            const hasAdminRole = Array.isArray(CHANNEL_IDS.ADMIN_ROLE) 
+                ? CHANNEL_IDS.ADMIN_ROLE.some(roleId => interaction.member.roles.cache.has(roleId))
+                : interaction.member.roles.cache.has(CHANNEL_IDS.ADMIN_ROLE);
+            
+            if (!hasAdminRole) {
                 return await interaction.reply({
-                    content: '❌ У вас нет прав для управления сообщениями!',
+                    content: '❌ Только администраторы могут использовать эту команду!',
                     ephemeral: true
                 });
             }
@@ -37,7 +43,7 @@ export function registerMessageUserClearCommand(client) {
                     `Были удалены сообщения пользователя в канале`,
                     '#FFA500',
                     [
-                        { name: 'Модератор', value: `${interaction.user} (ID: ${interaction.user.id})`, inline: true },
+                        { name: 'Администратор', value: `${interaction.user} (ID: ${interaction.user.id})`, inline: true },
                         { name: 'Пользователь', value: `${user} (ID: ${user.id})`, inline: true },
                         { name: 'Канал', value: `${interaction.channel}`, inline: true },
                         { name: 'Удалено сообщений', value: `${userMessages.length}`, inline: true }
