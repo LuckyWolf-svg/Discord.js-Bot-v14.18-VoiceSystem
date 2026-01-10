@@ -38,7 +38,6 @@ function initializeDB() {
 }
 
 export function initializeUserInfoDB() {
-    // Таблица с информацией о пользователях
     db.run(`
         CREATE TABLE IF NOT EXISTS user_info (
             user_id TEXT PRIMARY KEY,
@@ -56,12 +55,10 @@ export function initializeUserInfoDB() {
             console.error('Ошибка создания таблицы user_info:', err.message);
         } else {
             console.log('✅ Таблица user_info готова');
-            // Добавляем недостающие колонки, если они есть
             addMissingColumns();
         }
     });
     
-    // Таблица истории варнов
     db.run(`
         CREATE TABLE IF NOT EXISTS warn_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +74,6 @@ export function initializeUserInfoDB() {
         }
     });
     
-    // Таблица истории мутов
     db.run(`
         CREATE TABLE IF NOT EXISTS mute_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,7 +90,6 @@ export function initializeUserInfoDB() {
     });
 }
 
-// Функция для добавления недостающих колонок
 function addMissingColumns() {
     const columnsToAdd = [
         { name: 'warn_expiry_time', type: 'DATETIME' }
@@ -103,7 +98,6 @@ function addMissingColumns() {
     columnsToAdd.forEach(column => {
         db.run(`ALTER TABLE user_info ADD COLUMN ${column.name} ${column.type}`, (err) => {
             if (err) {
-                // Колонка уже существует, это нормально
                 if (!err.message.includes('duplicate column name')) {
                     console.log(`Колонка ${column.name} уже существует или ошибка:`, err.message);
                 }
@@ -128,7 +122,6 @@ export function getUserInfo(userId) {
                 if (row) {
                     resolve(row);
                 } else {
-                    // Создаем запись, если пользователя нет в базе
                     db.run(`
                         INSERT INTO user_info (user_id, balance, warns) 
                         VALUES (?, 0, 0)
@@ -201,8 +194,6 @@ export function addWarn(userId, moderatorId, warnCount = 1, reason = '') {
     return new Promise((resolve, reject) => {
         db.serialize(() => {
             db.run('BEGIN TRANSACTION');
-            
-            // Получаем текущую информацию о пользователе
             db.get(`SELECT warns FROM user_info WHERE user_id = ?`, [userId], (err, row) => {
                 if (err) {
                     db.run('ROLLBACK');
@@ -213,9 +204,7 @@ export function addWarn(userId, moderatorId, warnCount = 1, reason = '') {
                 const currentWarns = row ? row.warns : 0;
                 const newWarns = currentWarns + warnCount;
                 const now = new Date();
-                const expiryTime = new Date(now.getTime() + 12 * 60 * 60 * 1000); // +12 часов
-                
-                // Обновляем warns и время истечения
+                const expiryTime = new Date(now.getTime() + 12 * 60 * 60 * 1000);
                 db.run(`
                     UPDATE user_info 
                     SET warns = ?, 
@@ -229,8 +218,6 @@ export function addWarn(userId, moderatorId, warnCount = 1, reason = '') {
                         reject(err);
                         return;
                     }
-                    
-                    // Если строка не была обновлена (пользователя нет), создаем новую
                     if (this.changes === 0) {
                         db.run(`
                             INSERT INTO user_info 
@@ -243,7 +230,6 @@ export function addWarn(userId, moderatorId, warnCount = 1, reason = '') {
                                 return;
                             }
                             
-                            // Добавляем запись в историю варнов
                             db.run(`
                                 INSERT INTO warn_history 
                                 (user_id, moderator_id, warn_count, reason)
@@ -270,7 +256,6 @@ export function addWarn(userId, moderatorId, warnCount = 1, reason = '') {
                             });
                         });
                     } else {
-                        // Добавляем запись в историю варнов
                         db.run(`
                             INSERT INTO warn_history 
                             (user_id, moderator_id, warn_count, reason)
@@ -318,7 +303,6 @@ export function removeWarns(userId, warnCount = null) {
                         newWarns = currentWarns - warnCount;
                     }
                     
-                    // Обновляем количество варнов
                     db.run(`
                         UPDATE user_info 
                         SET warns = ?, 
@@ -335,7 +319,6 @@ export function removeWarns(userId, warnCount = null) {
                             return;
                         }
                         
-                        // Удаляем историю варнов если варны сняты полностью
                         if (newWarns === 0) {
                             db.run(`DELETE FROM warn_history WHERE user_id = ?`, [userId], function(err) {
                                 if (err) {
@@ -441,7 +424,6 @@ export function addMute(userId, moderatorId, durationMinutes, reason = '') {
                     return;
                 }
                 
-                // Если строка не была обновлена (пользователя нет), создаем новую
                 if (this.changes === 0) {
                     db.run(`
                         INSERT INTO user_info 
@@ -454,7 +436,6 @@ export function addMute(userId, moderatorId, durationMinutes, reason = '') {
                             return;
                         }
                         
-                        // Добавляем запись в историю мутов
                         db.run(`
                             INSERT INTO mute_history 
                             (user_id, moderator_id, duration_minutes, reason)
@@ -481,7 +462,6 @@ export function addMute(userId, moderatorId, durationMinutes, reason = '') {
                         });
                     });
                 } else {
-                    // Добавляем запись в историю мутов
                     db.run(`
                         INSERT INTO mute_history 
                         (user_id, moderator_id, duration_minutes, reason)
@@ -549,7 +529,6 @@ export function checkAndRemoveExpiredMutes() {
                 return;
             }
             
-            // Удаляем все просроченные муты
             const placeholders = userIds.map(() => '?').join(',');
             db.run(`
                 UPDATE user_info 
@@ -739,7 +718,6 @@ export function updateChannelId(userId, channelId) {
 
 // ============ COMPATIBILITY FUNCTIONS ============
 
-// Для совместимости со старым кодом
 export function getUserBalance(userId) {
     return getUserInfo(userId).then(user => ({
         user_id: user.user_id,
@@ -747,7 +725,6 @@ export function getUserBalance(userId) {
     }));
 }
 
-// Для совместимости со старым кодом (альтернативное название)
 export function initializeEconomyDB() {
     return initializeUserInfoDB();
 }
