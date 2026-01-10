@@ -1,11 +1,14 @@
+# Discord.js-Bot-v14.25
 Russian Version
-Открытый код Discord бота с голосовой системой сохраняющая данные каждого личного канала в базе данных и её настройкой через кнопки  
+Часть открытого кода Discord бота с голосовой системой сохраняющая данные каждого личного канала в базе данных и её настройкой через кнопки  
 В Config.js закидываем токен своего бота, полученный в Discord developer portal.
-В channels.js меняем id каналов на свои
-Если хотите сделать настройки в голосовом канале то зайдите в этот канал, запустите бота и пропишите !VoiceSetting 
+В server_ids.js меняем id каналов на свои
+Для создания Окна с настройками пропишите /voicesettings и id
 
 English Version
-This version have only CreateChannels and Button menu with settings change name and limit
-To create Settings you need sit in voice, run bot and send !VoiceSetting
+English Version
+Part of the open-source Discord voice bot with system that saves data for each personal channel in a database and its configuration via buttons.
+In Config.js, add your bot token obtained from the Discord Developer Portal.
+In server_ids.js, replace the channel IDs with your own.
+To create the Settings Window, type /voicesettings and provide the ID.
 
-# Discord.js-Bot-v14.18
