@@ -11,32 +11,43 @@ const client = new Client({
         GatewayIntentBits.GuildMembers
     ] 
 });
-
+client.setMaxListeners(20);
 initializeEconomyDB();
+import { registerCommands } from './registerCommands.js';
 
-/* Commands */
 import { registerVoiceButton } from './Commands/VoiceButtons.js';
 registerVoiceButton(client);
 import { registerMessageClearCommand } from './Commands/MessageClear.js';
 registerMessageClearCommand(client);
 import { registerMessageUserClearCommand } from './Commands/MessageUserClear.js';
 registerMessageUserClearCommand(client);
-import { registerCommands } from './registerCommands.js';
-
+import { registerVoiceCreateLog } from './Events/Logs/VoiceCreate.js';
+registerVoiceCreateLog(client);
+import { registerVoiceDeleteLog } from './Events/Logs/VoiceDelete.js';
+registerVoiceDeleteLog(client);
+import { registerVoiceChatClear } from './Events/VoiceChatClear.js'
+registerVoiceChatClear(client);
 
 client.login(config.token);
-client.on('ready', async () => {
+client.once('clientReady', async () => {
     console.log(`✅ Bot authorized as ${client.user.tag}!`);
     console.log(`🌐 Bot is on ${client.guilds.cache.size} servers`);
-    
-    // Регистрируем команды после готовности бота
+
+    client.guilds.cache.forEach(guild => {
+        const owner = guild.members.cache.get(guild.ownerId);
+        if (owner) {
+            console.log(`🏰 Сервер: ${guild.name} | Владелец: ${owner.user.tag} (ID: ${owner.id})`);
+        } else {
+            console.log(`🏰 Сервер: ${guild.name} | Владелец: ${guild.ownerId} (не в кэше)`);
+        }
+    });
+
     await registerCommands(client);
 });
-
-client.on('error', (error) => {
+client.once('error', (error) => {
     console.error('❌ Discord client error:', error);
 });
-
-process.on('unhandledRejection', (error) => {
+process.once('unhandledRejection', (error) => {
     console.error('❌ Unhandled rejection:', error);
 });
+
